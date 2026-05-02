@@ -96,6 +96,7 @@ const SaveManager = {
         todayCount: data.player?.todaySteps || 0,
         lastSport: 'walk',
         lastActivityDate: data.player?.lastStepDate || getTodayStr(),
+        modeCounts: {},
       };
       data.dailyTasks = this._deepClone(DEFAULT_SAVE.dailyTasks);
       data.version = SAVE_VERSION;
@@ -104,6 +105,27 @@ const SaveManager = {
     if (data.player.totalCount === undefined) data.player.totalCount = 0;
     if (data.player.todayCount === undefined) data.player.todayCount = 0;
     if (!data.player.modeCounts) data.player.modeCounts = {};
+
+    // 为旧存档补充 farm.plots 的 unlockCost 和 subtype
+    if (data.farm && Array.isArray(data.farm.plots)) {
+      const defaultPlots = DEFAULT_SAVE.farm.plots;
+      data.farm.plots.forEach((plot, idx) => {
+        // 补充 unlockCost
+        if (plot.unlockCost === undefined && defaultPlots[idx]) {
+          plot.unlockCost = defaultPlots[idx].unlockCost;
+        }
+        // 确保 wasteland 类型有正确的结构
+        if (plot.type === 'wasteland') {
+          if (!plot.unlockCost) plot.unlockCost = { wood: 5 };
+          if (plot.planting === undefined) plot.planting = null;
+        }
+        // 确保 garden 类型有 subtype
+        if (plot.type === 'garden' && !plot.subtype) {
+          plot.subtype = idx === 0 ? 'garden' : (idx === 1 ? 'cottage' : 'garden');
+        }
+      });
+    }
+
     return data;
   },
 

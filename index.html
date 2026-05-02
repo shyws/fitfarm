@@ -6,8 +6,12 @@
   <meta name="theme-color" content="#2d6a4f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>FitFarm 健身家园</title>
-  <link rel="stylesheet" href="src/css/style.css">
+  <!-- 禁用缓存，确保每次都加载最新版本 -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>FitFarm 健身家园 v2.1.0</title>
+  <link rel="stylesheet" href="src/css/style.css?v=20260502v2">
 </head>
 <body>
 
@@ -193,11 +197,11 @@
 <div id="toast-container"></div>
 
 <!-- ── JS 模块 ── -->
-<script src="src/js/save.js"></script>
-<script src="src/js/motion.js"></script>
-<script src="src/js/resources.js"></script>
-<script src="src/js/building.js"></script>
-<script src="src/js/engine.js"></script>
+<script src="src/js/save.js?v=20260502v2"></script>
+<script src="src/js/motion.js?v=20260502v2"></script>
+<script src="src/js/resources.js?v=20260502v2"></script>
+<script src="src/js/building.js?v=20260502v2"></script>
+<script src="src/js/engine.js?v=20260502v2"></script>
 
 <script>
 /* ══════════════════════════════════════════════
@@ -358,12 +362,15 @@ function renderFarm(state) {
     cell.dataset.plotId = plot.id;
 
     if (!plot.unlocked) {
-      // 未解锁
-      const cost = plot.unlockCost?.wood || 0;
+      // 未解锁：直接读取 unlockCost，若缺失则显示占位
+      const woodCost = plot.unlockCost?.wood;
+      const costText = (woodCost !== undefined && woodCost !== null)
+        ? `🪵${woodCost}块`
+        : '🪵?块';
       cell.innerHTML = `
         <span class="plot-emoji">🔒</span>
         <span class="plot-label">需木材解锁</span>
-        <span style="font-size:10px;color:#c0985a;">🪵${cost}块</span>`;
+        <span style="font-size:10px;color:#c0985a;">${costText}</span>`;
       cell.onclick = () => showUnlockPrompt(plot.id);
     } else if (plot.type === 'wasteland') {
       // 荒地地块
@@ -550,11 +557,18 @@ function confirmUpgrade() {
 
 function showUnlockPrompt(plotId) {
   const state = GameEngine.getState();
-  if (!state) return;
+  if (!state) { console.warn('[showUnlockPrompt] GameEngine.getState() 返回 null'); return; }
   const plot = state.farm.plots.find(p => p.id === plotId);
   if (!plot || plot.unlocked) return;
 
-  const needWood = plot.unlockCost?.wood || 0;
+  const needWood = plot.unlockCost?.wood;
+  // 防御：unlockCost 数据异常时，不执行任何操作
+  if (needWood === undefined || needWood === null || needWood <= 0) {
+    console.warn('[showUnlockPrompt] 地块', plotId, '的 unlockCost 数据异常:', plot.unlockCost);
+    showToast('⚠️ 地块数据异常，请尝试刷新页面');
+    return;
+  }
+
   const haveWood = state.resources.wood || 0;
 
   if (haveWood >= needWood) {
