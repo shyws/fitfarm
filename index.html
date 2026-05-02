@@ -214,32 +214,36 @@ const EP_DAY_TARGET = 100;
 // ─── 初始化 ──────────────────────────────────
 
 window.addEventListener('DOMContentLoaded', () => {
-  const state = GameEngine.init({
-    onActivityUpdate:    updateActivityUI,
-    onCoinsGained:       showCoinFloat,
-    onTaskCompleted:     onTaskCompleted,
-    onMilestone:         showMilestoneToast,
-    onPcMode:            enablePcMode,
-    onMotionDenied:      () => showToast('⚠️ 传感器权限被拒绝，请使用模拟按钮'),
-    onMotionStarted:     () => updateMotionStatus(true),
-    onSportModeChanged:  updateSportCard,
-    onPlotUpgraded:      (plot, res) => { renderFarm(GameEngine.getState()); updateResourceUI(res); },
-    onPlotUnlocked:      (id, res)   => { renderFarm(GameEngine.getState()); updateResourceUI(res); },
-    onRewardClaimed:     onRewardClaimed,
-    onReset:             () => location.reload(),
-    onSeedPlanted:       onSeedPlanted,
-    onHarvest:            onHarvest,
-  });
+  try {
+    const state = GameEngine.init({
+      onActivityUpdate:    updateActivityUI,
+      onCoinsGained:       showCoinFloat,
+      onTaskCompleted:     onTaskCompleted,
+      onMilestone:         showMilestoneToast,
+      onPcMode:            enablePcMode,
+      onMotionDenied:      () => showToast('⚠️ 感器权限被拒绝，请使用模拟按钮'),
+      onMotionStarted:     () => updateMotionStatus(true),
+      onSportModeChanged:  updateSportCard,
+      onPlotUpgraded:      (plot, res) => { renderFarm(GameEngine.getState()); updateResourceUI(res); },
+      onPlotUnlocked:      (id, res)   => { renderFarm(GameEngine.getState()); updateResourceUI(res); },
+      onRewardClaimed:     onRewardClaimed,
+      onReset:             () => location.reload(),
+      onSeedPlanted:       onSeedPlanted,
+      onHarvest:            onHarvest,
+    });
 
-  renderSportSelector(state);
-  renderAll(state);
-  // 启动种植倒计时更新
-  startPlantingTimer();
-}
+    renderSportSelector(state);
+    renderAll(state);
+    // 启动种植倒计时更新
+    startPlantingTimer();
 
-  if (!MotionEngine.isMobile()) {
-    enablePcMode();
-    updateMotionStatus(false, '🖥️ PC模式：使用模拟按钮体验游戏');
+    if (!MotionEngine.isMobile()) {
+      enablePcMode();
+      updateMotionStatus(false, '🖥️ PC模式：使用模拟按钮体验游戏');
+    }
+  } catch (error) {
+    console.error('FitFarm 初始化失败:', error);
+    alert('游戏初始化失败，请刷新页面。错误信息：' + error.message);
   }
 });
 
