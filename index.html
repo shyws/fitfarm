@@ -19,7 +19,7 @@
 
   <!-- ── 顶部状态栏 ── -->
   <header id="status-bar">
-    <div class="game-title">🌿 FitFarm</div>
+    <div class="game-title">🌿 FitFarm <span id="debug-version" style="font-size:10px;opacity:0.5;"></span></div>
     <div class="ep-info">
       <div class="today-ep">今日 <span id="today-ep-val">0.0</span> EP</div>
       <div style="font-size:11px;opacity:0.7;">累计 <span id="total-ep-val">0.0</span> EP</div>
@@ -200,13 +200,13 @@
 <script src="src/js/save.js?v=20260502v2"></script>
 <script src="src/js/motion.js?v=20260502v2"></script>
 <script src="src/js/resources.js?v=20260502v2"></script>
-<script src="src/js/building.js?v=20260502v2"></script>
+
 <script src="src/js/engine.js?v=20260502v2"></script>
 
 <script>
 /* ══════════════════════════════════════════════
-   UI 控制器 v2.0
-   支持多运动模式选择、EP实时展示
+   UI 控制器 v2.1.0
+   支持多运动模式选择、EP实时展示、种植系统
 ══════════════════════════════════════════════ */
 
 let _currentPlotId = null;
@@ -215,10 +215,34 @@ let _isMotionActive = false;
 // 今日任务最高EP目标（用于进度条）
 const EP_DAY_TARGET = 100;
 
+// ─── 版本检查：存档版本不匹配时自动清除 ─────────────
+// 此版本号需与 save.js 中的 SAVE_VERSION 保持同步
+(function versionCheck() {
+  const LATEST = '2.1.0';
+  try {
+    const raw = localStorage.getItem('fitfarm_save');
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data.version !== LATEST) {
+        console.warn('[FitFarm] 存档版本不匹配 (' + data.version + ' → ' + LATEST + ')，自动清除旧存档');
+        localStorage.removeItem('fitfarm_save');
+      }
+    }
+  } catch(e) {
+    localStorage.removeItem('fitfarm_save');
+  }
+})();
+
 // ─── 初始化 ──────────────────────────────────
 
 window.addEventListener('DOMContentLoaded', () => {
   try {
+    console.log('%c[FitFarm] DOMContentLoaded 开始初始化', 'color:#2d6a4f;font-weight:bold;');
+    // 输出版本信息便于调试
+    console.log('[FitFarm] save.js SAVE_VERSION =', window.SAVE_VERSION || 'unknown');
+    console.log('[FitFarm] ResourceManager 存在？', typeof ResourceManager !== 'undefined');
+    console.log('[FitFarm] BuildingManager 存在？', typeof BuildingManager !== 'undefined');
+
     const state = GameEngine.init({
       onActivityUpdate:    updateActivityUI,
       onCoinsGained:       showCoinFloat,
@@ -240,6 +264,10 @@ window.addEventListener('DOMContentLoaded', () => {
     renderAll(state);
     // 启动种植倒计时更新
     startPlantingTimer();
+
+    // 显示版本号到页面顶部（方便调试）
+    const verEl = document.getElementById('debug-version');
+    if (verEl) verEl.textContent = 'v' + (window.SAVE_VERSION || 'unknown');
 
     if (!MotionEngine.isMobile()) {
       enablePcMode();
