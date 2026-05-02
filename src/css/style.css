@@ -181,6 +181,20 @@ html, body {
 }
 .plot-cell.locked .plot-emoji { font-size: 32px; opacity: 0.4; }
 .plot-cell.locked .plot-label { opacity: 0.4; }
+.plot-cost {
+  font-size: 10px;
+  color: #c0985a;
+  margin-top: 2px;
+}
+.plot-countdown {
+  font-size: 10px;
+  color: #888;
+}
+.plot-harvest-hint {
+  font-size: 9px;
+  color: var(--green-dark);
+  font-weight: 600;
+}
 
 /* ─── 顶部EP显示（替换step-info）────────────────── */
 #status-bar .ep-info {

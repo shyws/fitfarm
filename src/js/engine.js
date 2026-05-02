@@ -86,7 +86,7 @@ const GameEngine = (() => {
   function upgradePlot(plotId) {
     const result = BuildingManager.upgradePlot(state, plotId);
     if (result.success) {
-      _uiCallbacks.onPlotUpgraded?.(result.newPlot, state.resources);
+      _uiCallbacks.onPlotUpgraded?.(result.plot, state.resources);
       SaveManager.save(state);
     }
     return result;

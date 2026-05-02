@@ -4,20 +4,19 @@
  */
 
 const SAVE_KEY = 'fitfarm_save';
-const SAVE_VERSION = '2.0.0';
+const SAVE_VERSION = '2.1.0';
 
 const DEFAULT_SAVE = {
   version: SAVE_VERSION,
   lastSaved: null,
   player: {
-    // v2: 改用 EP 为通用单位，兼容所有运动
-    totalEp: 0,          // 累计能量点（所有运动折算）
-    todayEp: 0,          // 今日能量点
-    totalCount: 0,       // 累计计数（步/下/个，仅展示用）
-    todayCount: 0,       // 今日计数
-    lastSport: 'walk',   // 最后选择的运动类型
+    totalEp: 0,
+    todayEp: 0,
+    totalCount: 0,
+    todayCount: 0,
+    lastSport: 'walk',
     lastActivityDate: getTodayStr(),
-    modeCounts: {},      // v2.1: 按运动模式分别计数 { walk: 100, run: 50, ... }
+    modeCounts: {},
   },
   resources: {
     coins: 10,
@@ -26,12 +25,18 @@ const DEFAULT_SAVE = {
   },
   farm: {
     plots: [
-      { id: 0, type: 'house',  level: 1, unlocked: true },
-      { id: 1, type: 'garden', level: 0, unlocked: true },
-      { id: 2, type: 'field',  level: 0, unlocked: true },
-      { id: 3, type: 'empty',  level: 0, unlocked: false },
-      { id: 4, type: 'empty',  level: 0, unlocked: false },
-      { id: 5, type: 'empty',  level: 0, unlocked: false },
+      // 花园地块（默认可用，可升级建筑、合成种子）
+      { id: 0, type: 'garden', subtype: 'garden',  level: 1, unlocked: true },
+      { id: 1, type: 'garden', subtype: 'cottage', level: 1, unlocked: true },
+
+      // 荒地地块（用木材解锁，用于种植）
+      { id: 2, type: 'wasteland', level: 0, unlocked: false, unlockCost: { wood: 3 }, planting: null },
+      { id: 3, type: 'wasteland', level: 0, unlocked: false, unlockCost: { wood: 3 }, planting: null },
+      { id: 4, type: 'wasteland', level: 0, unlocked: false, unlockCost: { wood: 5 }, planting: null },
+      { id: 5, type: 'wasteland', level: 0, unlocked: false, unlockCost: { wood: 5 }, planting: null },
+      { id: 6, type: 'wasteland', level: 0, unlocked: false, unlockCost: { wood: 8 }, planting: null },
+      { id: 7, type: 'wasteland', level: 0, unlocked: false, unlockCost: { wood: 8 }, planting: null },
+      { id: 8, type: 'wasteland', level: 0, unlocked: false, unlockCost: { wood: 10 }, planting: null },
     ],
   },
   dailyTasks: {
@@ -43,7 +48,7 @@ const DEFAULT_SAVE = {
     ],
   },
   achievements: {
-    milestones: [],   // 存储已触发的 ep 里程碑值
+    milestones: [],
   },
 };
 
@@ -57,7 +62,6 @@ const SaveManager = {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return this._deepClone(DEFAULT_SAVE);
       const data = JSON.parse(raw);
-      // 每日重置检查
       const save = this._migrate(data);
       this._checkDailyReset(save);
       return save;
@@ -82,7 +86,6 @@ const SaveManager = {
   },
 
   _migrate(data) {
-    // v1 → v2 迁移：步数转EP
     if (!data.version || data.version === '1.0.0') {
       const steps = data.player?.totalSteps || 0;
       const ep = data.player?.energyPoints || steps * 0.1;
@@ -94,11 +97,9 @@ const SaveManager = {
         lastSport: 'walk',
         lastActivityDate: data.player?.lastStepDate || getTodayStr(),
       };
-      // 任务也迁移为EP任务
       data.dailyTasks = this._deepClone(DEFAULT_SAVE.dailyTasks);
       data.version = SAVE_VERSION;
     }
-    // 补全缺失字段（防止新增字段导致undefined）
     if (data.player.lastSport === undefined) data.player.lastSport = 'walk';
     if (data.player.totalCount === undefined) data.player.totalCount = 0;
     if (data.player.todayCount === undefined) data.player.todayCount = 0;
@@ -110,12 +111,10 @@ const SaveManager = {
     const today = getTodayStr();
     if (save.dailyTasks.date !== today) {
       save.dailyTasks.date = today;
-      // 重置任务进度
       save.dailyTasks.tasks = this._deepClone(DEFAULT_SAVE.dailyTasks.tasks);
       save.player.todayEp = 0;
       save.player.todayCount = 0;
       save.player.lastActivityDate = today;
-      // 重置每日模式计数
       save.player.modeCounts = {};
     }
   },

@@ -358,24 +358,48 @@ function renderFarm(state) {
     cell.dataset.plotId = plot.id;
 
     if (!plot.unlocked) {
+      // 未解锁
+      const cost = plot.unlockCost?.wood || 0;
       cell.innerHTML = `
         <span class="plot-emoji">🔒</span>
-        <span class="plot-label">需要木材解锁</span>`;
-      cell.onclick = () => showUnlockPrompt(plot.id, state.resources);
-    } else if (plot.type === 'field' && plot.level === 0 && !plot.planting) {
-      // 荒地（level=0 且未种植）：点击显示种植选项
+        <span class="plot-label">需木材解锁</span>
+        <span style="font-size:10px;color:#c0985a;">🪵${cost}块</span>`;
+      cell.onclick = () => showUnlockPrompt(plot.id);
+    } else if (plot.type === 'wasteland') {
+      // 荒地地块
+      if (plot.planting) {
+        const status = GameEngine.getPlantingStatus(plot.id);
+        if (status && status.isReady) {
+          cell.classList.add('plant-ready');
+          cell.innerHTML = `
+            <span class="plot-emoji">${status.seedDef.emoji}</span>
+            <span class="plot-label">✅ 可收获</span>`;
+          cell.onclick = () => doHarvest(plot.id);
+        } else if (status) {
+          const mins = Math.floor(status.remainingSeconds / 60);
+          const secs = status.remainingSeconds % 60;
+          cell.innerHTML = `
+            <span class="plot-emoji">${status.seedDef.emoji}</span>
+            <span class="plot-label">⏳ 生长中</span>
+            <span style="font-size:10px;color:#888;">${mins}分${secs}秒</span>`;
+          cell.onclick = null;
+        } else {
+          cell.innerHTML = `<span class="plot-emoji">🟫</span><span class="plot-label">🌱 点击种植</span>`;
+          cell.onclick = () => showSeedSelectModal(plot.id);
+        }
+      } else {
+        // 未种植
+        cell.innerHTML = `<span class="plot-emoji">🟫</span><span class="plot-label">🌱 点击种植</span>`;
+        cell.onclick = () => showSeedSelectModal(plot.id);
+      }
+    } else if (plot.type === 'garden') {
+      // 花园建筑
       const info = BuildingManager.getPlotInfo(plot);
       cell.innerHTML = `
         <span class="plot-emoji">${info.emoji}</span>
-        <span class="plot-label">点击种植</span>`;
-      cell.onclick = () => showPlantModal(plot.id);
-    } else {
-      const info = BuildingManager.getPlotInfo(plot);
-      cell.innerHTML = `
-        <span class="plot-emoji">${info.emoji}</span>
-        <span class="plot-label">${info.label}</span>
-        ${plot.level > 0 ? `<span class="level-badge">Lv${plot.level}</span>` : ''}`;
-      cell.onclick = () => showUpgradeModal(plot.id, state);
+        <span class="plot-label">${info.name}</span>
+        <span class="level-badge">Lv${plot.level}</span>`;
+      cell.onclick = () => showUpgradeModal(plot.id);
     }
     grid.appendChild(cell);
   });
@@ -457,14 +481,18 @@ function updateMotionStatus(active, customMsg) {
 
 // ─── 升级弹窗 ─────────────────────────────────
 
-function showUpgradeModal(plotId, state) {
+function showUpgradeModal(plotId) {
+  const state = GameEngine.getState();
+  if (!state) return;
   const plot = state.farm.plots.find(p => p.id === plotId);
+  if (!plot || plot.type !== 'garden') return;
+
   const info = BuildingManager.getPlotInfo(plot);
   _currentPlotId = plotId;
 
   document.getElementById('upgrade-modal-title').textContent = `升级 ${info.name}`;
 
-  if (!info.canUpgrade || !info.nextCost) {
+  if (info.isMax) {
     document.getElementById('upgrade-from-emoji').textContent = info.emoji;
     document.getElementById('upgrade-to-emoji').textContent = '✨';
     document.getElementById('upgrade-level-text').textContent = `已达最高等级 Lv${plot.level}`;
@@ -472,12 +500,12 @@ function showUpgradeModal(plotId, state) {
     document.getElementById('upgrade-confirm-btn').disabled = true;
     document.getElementById('upgrade-confirm-btn').textContent = '已满级';
   } else {
-    const building = BuildingManager.BUILDINGS[plot.type];
-    const nextLevelData = building.levels[plot.level + 1];
     document.getElementById('upgrade-from-emoji').textContent = info.emoji;
-    document.getElementById('upgrade-to-emoji').textContent = nextLevelData.emoji;
+    // 根据子类型获取下一级emoji
+    const nextEmojis = { garden: '🏡', cottage: '🏠', windmill: '🏭', pond: '🏞️', barn: '🌾', orchard: '🍎' };
+    document.getElementById('upgrade-to-emoji').textContent = nextEmojis[plot.subtype] || '🏡';
     document.getElementById('upgrade-level-text').textContent =
-      `${info.label} → ${nextLevelData.label}  (Lv${plot.level} → Lv${plot.level + 1})`;
+      `${info.name} → ${info.name}  (Lv${plot.level} → Lv${plot.level + 1})`;
 
     const costEl = document.getElementById('upgrade-cost-display');
     costEl.innerHTML = '';
@@ -520,16 +548,18 @@ function confirmUpgrade() {
 
 // ─── 解锁地块 ─────────────────────────────────
 
-function showUnlockPrompt(plotId, resources) {
-  const cost = BuildingManager.UNLOCK_COST;
-  const haveWood = resources.wood || 0;
-  const needWood = cost.wood;
+function showUnlockPrompt(plotId) {
+  const state = GameEngine.getState();
+  if (!state) return;
+  const plot = state.farm.plots.find(p => p.id === plotId);
+  if (!plot || plot.unlocked) return;
+
+  const needWood = plot.unlockCost?.wood || 0;
+  const haveWood = state.resources.wood || 0;
 
   if (haveWood >= needWood) {
-    // 资源足够，显示确认弹窗
     showUnlockConfirmModal(plotId, needWood, haveWood);
   } else {
-    // 资源不足，显示详细提示
     showUnlockInsufficientModal(needWood, haveWood);
   }
 }
@@ -633,7 +663,7 @@ function updatePlantingUI() {
   if (!state) return;
 
   state.farm.plots.forEach(plot => {
-    if (!plot.unlocked || plot.type !== 'field') return;
+    if (!plot.unlocked || plot.type !== 'wasteland') return;
 
     const cell = document.querySelector(`.plot-cell[data-plot-id="${plot.id}"]`);
     if (!cell) return;
@@ -643,26 +673,41 @@ function updatePlantingUI() {
       if (!status) return;
 
       if (status.isReady) {
-        // 作物成熟，显示收获状态
-        cell.querySelector('.plot-emoji').textContent = status.seedDef.emoji;
-        cell.querySelector('.plot-label').textContent = '✅ 可收获';
-        cell.classList.add('plant-ready');
-        cell.onclick = () => showHarvestModal(plot.id);
+        // 作物成熟
+        if (!cell.classList.contains('plant-ready')) {
+          cell.querySelector('.plot-emoji').textContent = status.seedDef.emoji;
+          cell.querySelector('.plot-label').textContent = '✅ 可收获';
+          cell.classList.add('plant-ready');
+          cell.onclick = () => doHarvest(plot.id);
+        }
       } else {
-        // 生长中，显示进度
+        // 生长中
         const mins = Math.floor(status.remainingSeconds / 60);
         const secs = status.remainingSeconds % 60;
-        const timeStr = mins > 0 ? `${mins}分${secs}秒` : `${secs}秒`;
-        cell.querySelector('.plot-label').textContent = `⏳ ${timeStr}`;
+        const labelEl = cell.querySelector('.plot-label');
+        const countdownEl = cell.querySelector('.plot-countdown');
+        if (labelEl) labelEl.textContent = '⏳ 生长中';
+        if (countdownEl) {
+          countdownEl.textContent = `${mins}分${secs}秒`;
+        } else {
+          const span = document.createElement('span');
+          span.className = 'plot-countdown';
+          span.style = 'font-size:10px;color:#888;';
+          span.textContent = `${mins}分${secs}秒`;
+          cell.appendChild(span);
+        }
       }
     }
   });
 }
 
-function showPlantModal(plotId) {
+// ─── 种子选择弹窗 ───────────────────────────────
+
+function showSeedSelectModal(plotId) {
   const state = GameEngine.getState();
+  if (!state) return;
   const plot = state.farm.plots.find(p => p.id === plotId);
-  if (!plot || plot.type !== 'field' || plot.level > 0 || plot.planting) return;
+  if (!plot || plot.type !== 'wasteland' || plot.planting) return;
 
   _currentPlantPlotId = plotId;
   const seedList = document.getElementById('plant-seed-list');
@@ -687,17 +732,16 @@ function showPlantModal(plotId) {
         </div>
       </div>
       <div class="seed-rewards">
-        ${seed.rewards.coins ? `🪙 ${seed.rewards.coins}` : ''}
-        ${seed.rewards.wood ? ` 🪵 ${seed.rewards.wood}` : ''}
+        ${seed.rewards.coins ? `🪙${seed.rewards.coins}` : ''}
+        ${seed.rewards.wood ? ` 🪵${seed.rewards.wood}` : ''}
       </div>
     `;
 
     if (seedCount > 0) {
       div.onclick = () => doPlant(seed.id);
       div.style.cursor = 'pointer';
-      div.style.opacity = '1';
     } else {
-      div.style.opacity = '0.5';
+      div.style.opacity = '0.4';
     }
 
     seedList.appendChild(div);
@@ -705,6 +749,9 @@ function showPlantModal(plotId) {
 
   document.getElementById('plant-modal').classList.add('show');
 }
+
+// 别名保持兼容性
+const showPlantModal = showSeedSelectModal;
 
 function closePlantModal(event) {
   if (!event || event.target === document.getElementById('plant-modal')) {
@@ -719,13 +766,25 @@ function doPlant(seedId) {
   if (result.success) {
     closePlantModal();
     renderFarm(GameEngine.getState());
+    updateResourceUI(GameEngine.getState().resources);
     showToast(`🌱 种下了${result.seedDef.name}！`);
   } else {
     const msgs = {
       no_seeds: '💡 种子不足，完成任务可获得种子',
       not_wasteland: '💡 只能在荒地上种植',
+      already_planted: '💡 这块地已有作物',
     };
     showToast(msgs[result.reason] || '种植失败');
+  }
+}
+
+// 直接收获（不需要弹窗确认）
+function doHarvest(plotId) {
+  const result = GameEngine.harvest(plotId);
+  if (result.success) {
+    renderFarm(GameEngine.getState());
+    updateResourceUI(GameEngine.getState().resources);
+    showToast(`🎉 收获${result.seedDef.name}！+🪙${result.rewards.coins || 0}${result.rewards.wood ? ` +🪵${result.rewards.wood}` : ''}`);
   }
 }
 

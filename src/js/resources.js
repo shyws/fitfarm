@@ -55,6 +55,16 @@ const ResourceManager = {
     { ep: 2000,  wood: 30, label: '铁人三项',  emoji: '🏅' },
   ],
 
+  // 花园建筑配置（type='garden' 的地块）
+  GARDEN_CONFIG: {
+    garden:   { name: '小花园',   emoji: '🏡', upgrade: [[200,2],[500,3],[1000,3]], rewards: { coins: 1, wood: 0 } },
+    cottage:  { name: '小农舍',   emoji: '🏠', upgrade: [[200,2],[500,3],[1000,3]], rewards: { coins: 2, wood: 0 } },
+    windmill: { name: '风车磨坊', emoji: '🏭', upgrade: [[300,2],[600,3],[1200,3]], rewards: { coins: 3, wood: 1 } },
+    pond:     { name: '鱼塘',     emoji: '🏞️', upgrade: [[250,2],[550,3],[1100,3]], rewards: { coins: 2, wood: 0 } },
+    barn:     { name: '谷仓',     emoji: '🌾', upgrade: [[220,2],[520,3],[1050,3]], rewards: { coins: 2, wood: 1 } },
+    orchard:  { name: '果园',     emoji: '🍎', upgrade: [[280,2],[580,3],[1150,3]], rewards: { coins: 4, wood: 0 } },
+  },
+
   /**
    * 获取玩家当前运动模式的计数
    * @param {Object} state - 游戏状态
@@ -156,7 +166,7 @@ const ResourceManager = {
   },
 
   /**
-   * 在地块上种植种子
+   * 在荒地地块上种植种子
    * @param {Object} state - 游戏状态
    * @param {number} plotId - 地块ID
    * @param {string} seedId - 种子ID
@@ -164,9 +174,8 @@ const ResourceManager = {
   plantSeed(state, plotId, seedId) {
     const plot = state.farm.plots.find(p => p.id === plotId);
     if (!plot || !plot.unlocked) return { success: false, reason: 'not_unlocked' };
-    if (plot.type !== 'field') return { success: false, reason: 'not_field' };
+    if (plot.type !== 'wasteland') return { success: false, reason: 'not_wasteland' };
     if (plot.planting) return { success: false, reason: 'already_planted' };
-    if (plot.level > 0) return { success: false, reason: 'not_wasteland' };
 
     const seedDef = this.SEED_TYPES[seedId];
     if (!seedDef) return { success: false, reason: 'invalid_seed' };
@@ -240,5 +249,130 @@ const ResourceManager = {
       remainingSeconds: Math.ceil(remaining / 1000),
       isReady,
     };
+  },
+
+  /**
+   * 获取花园建筑配置
+   * @param {string} subtype - 建筑子类型
+   */
+  getGardenConfig(subtype) {
+    return this.GARDEN_CONFIG[subtype] || null;
+  },
+
+  /**
+   * 获取升级所需资源
+   * @param {Object} plot - 地块对象
+   */
+  getUpgradeCost(plot) {
+    const config = this.getGardenConfig(plot.subtype);
+    if (!config) return null;
+    const up = config.upgrade[plot.level - 1];
+    if (!up) return null; // 已满级
+    return { coins: up[0], wood: up[1] };
+  },
+};
+
+/**
+ * BuildingManager - 建筑管理模块
+ * 处理地块解锁、建筑升级
+ */
+const BuildingManager = {
+  /**
+   * 解锁地块
+   * @param {Object} state - 游戏状态
+   * @param {number} plotId - 地块ID
+   */
+  unlockPlot(state, plotId) {
+    const plot = state.farm.plots.find(p => p.id === plotId);
+    if (!plot || plot.unlocked) {
+      return { success: false, reason: plot?.unlocked ? 'already_unlocked' : 'not_found' };
+    }
+
+    // 计算解锁所需资源
+    const cost = plot.unlockCost || {};
+    const hasEnough = Object.keys(cost).every(k => (state.resources[k] || 0) >= cost[k]);
+    if (!hasEnough) return { success: false, reason: 'not_enough_resources', cost };
+
+    // 扣除资源
+    Object.keys(cost).forEach(k => { state.resources[k] -= cost[k]; });
+
+    // 解锁地块
+    plot.unlocked = true;
+
+    return { success: true, plot };
+  },
+
+  /**
+   * 升级花园建筑
+   * @param {Object} state - 游戏状态
+   * @param {number} plotId - 地块ID
+   */
+  upgradePlot(state, plotId) {
+    const plot = state.farm.plots.find(p => p.id === plotId);
+    if (!plot || !plot.unlocked) {
+      return { success: false, reason: !plot ? 'not_found' : 'not_unlocked' };
+    }
+    if (plot.type !== 'garden') {
+      return { success: false, reason: 'not_garden' };
+    }
+
+    const cost = ResourceManager.getUpgradeCost(plot);
+    if (!cost) return { success: false, reason: 'max_level' };
+
+    const hasEnough = Object.keys(cost).every(k => (state.resources[k] || 0) >= cost[k]);
+    if (!hasEnough) return { success: false, reason: 'not_enough_resources', cost };
+
+    // 扣除资源
+    Object.keys(cost).forEach(k => { state.resources[k] -= cost[k]; });
+
+    // 升级
+    plot.level += 1;
+
+    return { success: true, plot };
+  },
+
+  /**
+   * 获取地块显示信息
+   * @param {Object} plot - 地块对象
+   */
+  getPlotInfo(plot) {
+    if (plot.type === 'wasteland') {
+      return {
+        name: '荒地',
+        emoji: '🟫',
+        label: '荒地',
+        canUpgrade: false,
+        nextCost: null,
+      };
+    }
+
+    // 花园地块
+    const config = ResourceManager.getGardenConfig(plot.subtype);
+    if (!config) {
+      return { name: '未知', emoji: '❓', label: '未知', canUpgrade: false, nextCost: null };
+    }
+
+    const isMax = !ResourceManager.getUpgradeCost(plot);
+    return {
+      name: config.name,
+      emoji: config.emoji,
+      label: config.name,
+      canUpgrade: !isMax,
+      nextCost: ResourceManager.getUpgradeCost(plot),
+      isMax,
+    };
+  },
+
+  /**
+   * 获取解锁地块所需资源
+   * @param {number} plotId - 地块ID
+   */
+  getUnlockCost(plotId) {
+    // 从 state 中获取地块的解锁成本
+    const state = GameEngine.getState();
+    if (!state) return null;
+    const plot = state.farm.plots.find(p => p.id === plotId);
+    if (!plot) return null;
+    return plot.unlockCost || null;
   },
 };
