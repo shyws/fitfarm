@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#2d6a4f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>FitFarm 健身家园</title>
+  <link rel="stylesheet" href="src/css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── 顶部状态栏 ── -->
+  <header id="status-bar">
+    <div class="game-title">🌿 FitFarm</div>
+    <div class="ep-info">
+      <div class="today-ep">今日 <span id="today-ep-val">0.0</span> EP</div>
+      <div style="font-size:11px;opacity:0.7;">累计 <span id="total-ep-val">0.0</span> EP</div>
+    </div>
+  </header>
+
+  <!-- ── 资源栏 ── -->
+  <div id="resource-bar">
+    <div class="res-item">
+      <span class="res-emoji">🪙</span>
+      <div>
+        <div class="res-value" id="res-coins">10</div>
+        <div class="res-label">金币</div>
+      </div>
+    </div>
+    <div class="res-item">
+      <span class="res-emoji">🌱</span>
+      <div>
+        <div class="res-value" id="res-seeds">3</div>
+        <div class="res-label">种子</div>
+      </div>
+    </div>
+    <div class="res-item">
+      <span class="res-emoji">🪵</span>
+      <div>
+        <div class="res-value" id="res-wood">0</div>
+        <div class="res-label">木材</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 主游戏区 ── -->
+  <main id="game-area">
+
+    <!-- 家园地块 -->
+    <div id="farm-grid"></div>
+
+    <!-- ══ 运动控制面板 ══ -->
+    <div id="motion-panel">
+      <div class="panel-title">🏃 运动计分</div>
+
+      <!-- 运动模式选择 -->
+      <div id="sport-selector">
+        <div class="sport-selector-label">选择运动类型</div>
+        <div id="sport-grid">
+          <!-- 由JS动态生成 -->
+        </div>
+      </div>
+
+      <!-- 当前运动状态卡 -->
+      <div id="sport-status-card">
+        <div class="sport-status-main">
+          <span id="sport-current-emoji">🚶</span>
+          <div class="sport-status-info">
+            <div id="sport-current-name">步行</div>
+            <div class="sport-ep-rate" id="sport-ep-rate">每步 0.1 EP</div>
+          </div>
+          <div class="sport-count-box">
+            <div class="sport-count-val" id="sport-count-val">0</div>
+            <div class="sport-count-unit" id="sport-count-unit">步</div>
+          </div>
+        </div>
+        <!-- 今日EP进度条 -->
+        <div class="ep-progress-wrap">
+          <div class="ep-progress-bar">
+            <div class="ep-progress-fill" id="ep-progress-fill" style="width:0%"></div>
+          </div>
+          <div class="ep-progress-label">今日 <span id="ep-progress-text">0 / 100 EP</span></div>
+        </div>
+      </div>
+
+      <!-- 控制按钮 -->
+      <div class="motion-btn-row">
+        <button id="start-btn" onclick="handleStartBtn()">
+          <span id="start-btn-icon">▶</span>
+          <span id="start-btn-text">开始记录</span>
+        </button>
+        <button id="sim-btn" onclick="GameEngine.simulateActivity(5)" style="display:none;">
+          👆 模拟运动 (+5次)
+        </button>
+      </div>
+
+      <div class="motion-status" id="motion-status">选择运动类型，点击开始</div>
+
+      <!-- 传感器说明提示 -->
+      <div id="sensor-tips" class="sensor-tips"></div>
+    </div>
+
+    <!-- 每日任务 -->
+    <div id="task-panel">
+      <div class="panel-title">📋 每日任务</div>
+      <div id="task-list"></div>
+    </div>
+
+  </main>
+
+  <!-- ── 底部导航 ── -->
+  <nav id="bottom-nav">
+    <button class="nav-btn active" onclick="switchTab('farm', event)">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">家园</span>
+    </button>
+    <button class="nav-btn" onclick="switchTab('sport', event)">
+      <span class="nav-icon">🏃</span>
+      <span class="nav-label">运动</span>
+    </button>
+    <button class="nav-btn" onclick="switchTab('tasks', event)">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">任务</span>
+    </button>
+    <button class="nav-btn" onclick="switchTab('profile', event)">
+      <span class="nav-icon">🏅</span>
+      <span class="nav-label">成就</span>
+    </button>
+    <button class="nav-btn" onclick="showResetConfirm()">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">设置</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- ── 升级弹窗 ── -->
+<div class="modal-overlay" id="upgrade-modal" onclick="closeUpgradeModal(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="upgrade-modal-title">升级建筑</div>
+    <div class="upgrade-arrow">
+      <span class="emoji-sm" id="upgrade-from-emoji"></span>
+      <span class="arrow">→</span>
+      <span class="emoji-sm" id="upgrade-to-emoji"></span>
+    </div>
+    <div style="text-align:center;font-size:13px;color:#888;margin-bottom:8px;" id="upgrade-level-text"></div>
+    <div class="cost-display" id="upgrade-cost-display"></div>
+    <button class="btn-primary" id="upgrade-confirm-btn" onclick="confirmUpgrade()">✅ 确认升级</button>
+    <button class="btn-secondary" onclick="closeUpgradeModal()">取消</button>
+  </div>
+</div>
+
+<!-- ── 奖励弹窗 ── -->
+<div class="modal-overlay" id="reward-modal" onclick="closeRewardModal(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div style="text-align:center;font-size:48px;margin-bottom:8px;" id="reward-emoji">🎁</div>
+    <div class="modal-title" id="reward-title">任务完成！</div>
+    <div id="reward-content" style="text-align:center;font-size:15px;color:#555;margin-bottom:16px;"></div>
+    <button class="btn-primary" onclick="closeRewardModal()">太棒了！</button>
+  </div>
+</div>
+
+<!-- ── Toast ── -->
+<div id="toast-container"></div>
+
+<!-- ── JS 模块 ── -->
+<script src="src/js/save.js"></script>
+<script src="src/js/motion.js"></script>
+<script src="src/js/resources.js"></script>
+<script src="src/js/building.js"></script>
+<script src="src/js/engine.js"></script>
+
+<script>
+/* ══════════════════════════════════════════════
+   UI 控制器 v2.0
+   支持多运动模式选择、EP实时展示
+══════════════════════════════════════════════ */
+
+let _currentPlotId = null;
+let _isMotionActive = false;
+
+// 今日任务最高EP目标（用于进度条）
+const EP_DAY_TARGET = 100;
+
+// ─── 初始化 ──────────────────────────────────
+
+window.addEventListener('DOMContentLoaded', () => {
+  const state = GameEngine.init({
+    onActivityUpdate:    updateActivityUI,
+    onCoinsGained:       showCoinFloat,
+    onTaskCompleted:     onTaskCompleted,
+    onMilestone:         showMilestoneToast,
+    onPcMode:            enablePcMode,
+    onMotionDenied:      () => showToast('⚠️ 传感器权限被拒绝，请使用模拟按钮'),
+    onMotionStarted:     () => updateMotionStatus(true),
+    onSportModeChanged:  updateSportCard,
+    onPlotUpgraded:      (plot, res) => { renderFarm(GameEngine.getState()); updateResourceUI(res); },
+    onPlotUnlocked:      (id, res)   => { renderFarm(GameEngine.getState()); updateResourceUI(res); },
+    onRewardClaimed:     onRewardClaimed,
+    onReset:             () => location.reload(),
+  });
+
+  renderSportSelector(state);
+  renderAll(state);
+
+  if (!MotionEngine.isMobile()) {
+    enablePcMode();
+    updateMotionStatus(false, '🖥️ PC模式：使用模拟按钮体验游戏');
+  }
+});
+
+// ─── 运动选择器渲染 ──────────────────────────
+
+function renderSportSelector(state) {
+  const modes = MotionEngine.getSportModes();
+  const grid = document.getElementById('sport-grid');
+  grid.innerHTML = '';
+
+  const currentMode = state.player.lastSport || 'walk';
+
+  Object.values(modes).forEach(mode => {
+    const btn = document.createElement('button');
+    btn.className = 'sport-btn' + (mode.id === currentMode ? ' active' : '');
+    btn.dataset.modeId = mode.id;
+    btn.innerHTML = `<span class="sport-emoji">${mode.emoji}</span><span class="sport-name">${mode.label}</span>`;
+    btn.onclick = () => selectSportMode(mode.id);
+    grid.appendChild(btn);
+  });
+
+  updateSportCard(modes[currentMode]);
+  updateSensorTip(currentMode);
+}
+
+function selectSportMode(modeId) {
+  // 如果正在运动，先停止
+  if (_isMotionActive) {
+    stopMotion();
+  }
+  GameEngine.setSportMode(modeId);
+  // 更新按钮高亮
+  document.querySelectorAll('.sport-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.modeId === modeId);
+  });
+  updateSensorTip(modeId);
+}
+
+function updateSportCard(modeDef) {
+  if (!modeDef) return;
+  document.getElementById('sport-current-emoji').textContent = modeDef.emoji;
+  document.getElementById('sport-current-name').textContent = modeDef.label;
+  document.getElementById('sport-ep-rate').textContent = `每${modeDef.unit} ${modeDef.epPerCount} EP`;
+  document.getElementById('sport-count-unit').textContent = modeDef.unit;
+  document.getElementById('start-btn-text').textContent = `开始${modeDef.label}`;
+}
+
+function updateSensorTip(modeId) {
+  const tips = {
+    walk:         '💡 手机放口袋，自然行走即可自动计步',
+    run:          '💡 手机放口袋，跑步振幅更大，系统自动区分',
+    jump_rope:    '💡 手持手机跳绳，或放口袋。极高频冲击触发',
+    jumping_jack: '💡 手持手机做开合跳，起跳+落地双峰检测',
+    clap_jump:    '💡 手持手机做胯下击掌，冲击时计数',
+    cycling:      '⚠️ 将手机放置在车把上（可用手机架），路面颠簸触发。注意骑行安全！',
+    swim:         '⚠️ 需手机防水（红米IP68防尘防水），绑在手臂上。注意防水等级！',
+  };
+  const el = document.getElementById('sensor-tips');
+  el.textContent = tips[modeId] || '';
+  el.className = 'sensor-tips ' + (modeId === 'cycling' || modeId === 'swim' ? 'warn' : 'info');
+}
+
+// ─── 全量渲染 ─────────────────────────────────
+
+function renderAll(state) {
+  updateActivityUI(state.player, state.resources);
+  renderFarm(state);
+  renderTasks(state);
+}
+
+// ─── 活动&资源UI ──────────────────────────────
+
+function updateActivityUI(player, resources, sportDef, count) {
+  const todayEp  = player.todayEp  || 0;
+  const totalEp  = player.totalEp  || 0;
+  const todayCount = player.todayCount || 0;
+
+  document.getElementById('today-ep-val').textContent  = todayEp.toFixed(1);
+  document.getElementById('total-ep-val').textContent  = totalEp.toFixed(1);
+  document.getElementById('sport-count-val').textContent = todayCount.toLocaleString();
+
+  // EP进度条（以100EP为满格）
+  const pct = Math.min(100, (todayEp / EP_DAY_TARGET) * 100);
+  document.getElementById('ep-progress-fill').style.width = pct + '%';
+  document.getElementById('ep-progress-text').textContent = `${todayEp.toFixed(1)} / ${EP_DAY_TARGET} EP`;
+
+  updateResourceUI(resources);
+}
+
+function updateResourceUI(resources) {
+  document.getElementById('res-coins').textContent = Math.floor(resources.coins);
+  document.getElementById('res-seeds').textContent = resources.seeds;
+  document.getElementById('res-wood').textContent  = resources.wood;
+}
+
+// ─── 家园渲染 ─────────────────────────────────
+
+function renderFarm(state) {
+  const grid = document.getElementById('farm-grid');
+  grid.innerHTML = '';
+  state.farm.plots.forEach(plot => {
+    const cell = document.createElement('div');
+    cell.className = 'plot-cell ' + (plot.unlocked ? 'unlocked' : 'locked');
+    cell.dataset.plotId = plot.id;
+
+    if (!plot.unlocked) {
+      cell.innerHTML = `
+        <span class="plot-emoji">🔒</span>
+        <span class="plot-label">需要木材解锁</span>`;
+      cell.onclick = () => showUnlockPrompt(plot.id, state.resources);
+    } else {
+      const info = BuildingManager.getPlotInfo(plot);
+      cell.innerHTML = `
+        <span class="plot-emoji">${info.emoji}</span>
+        <span class="plot-label">${info.label}</span>
+        ${plot.level > 0 ? `<span class="level-badge">Lv${plot.level}</span>` : ''}`;
+      cell.onclick = () => showUpgradeModal(plot.id, state);
+    }
+    grid.appendChild(cell);
+  });
+}
+
+// ─── 任务渲染 ─────────────────────────────────
+
+function renderTasks(state) {
+  const list = document.getElementById('task-list');
+  list.innerHTML = '';
+  const taskMeta = ResourceManager.DAILY_TASKS;
+
+  state.dailyTasks.tasks.forEach(task => {
+    const meta = taskMeta.find(m => m.id === task.id) || {};
+    const pct = Math.min(100, (task.progress / task.targetEp) * 100);
+    let btnClass = 'pending', btnText = `${task.progress.toFixed(1)}/${task.targetEp}EP`;
+    if (task.claimed)   { btnClass = 'claimed'; btnText = '已领取'; }
+    else if (task.completed) { btnClass = 'ready';   btnText = '领取！'; }
+
+    const div = document.createElement('div');
+    div.className = 'task-item';
+    div.innerHTML = `
+      <div class="task-info">
+        <div class="task-name">${meta.label || task.id}</div>
+        <div class="task-reward">${meta.desc || ''}</div>
+        <div class="task-progress-bar">
+          <div class="task-progress-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
+      <button class="task-claim-btn ${btnClass}"
+        onclick="${task.completed && !task.claimed ? `claimTask('${task.id}')` : ''}">${btnText}</button>`;
+    list.appendChild(div);
+  });
+}
+
+// ─── 运动控制 ─────────────────────────────────
+
+async function handleStartBtn() {
+  if (_isMotionActive) {
+    stopMotion();
+    return;
+  }
+  const result = await GameEngine.startMotion();
+  if (result.mode === 'motion') {
+    _isMotionActive = true;
+    document.getElementById('start-btn').classList.add('active');
+    document.getElementById('start-btn-icon').textContent = '⏹';
+    document.getElementById('start-btn-text').textContent = '停止记录';
+  }
+}
+
+function stopMotion() {
+  GameEngine.stopMotion();
+  _isMotionActive = false;
+  document.getElementById('start-btn').classList.remove('active');
+  document.getElementById('start-btn-icon').textContent = '▶';
+  const modeDef = MotionEngine.getCurrentMode();
+  document.getElementById('start-btn-text').textContent = `开始${modeDef?.label || '运动'}`;
+  updateMotionStatus(false);
+}
+
+function enablePcMode() {
+  document.getElementById('sim-btn').style.display = '';
+  updateMotionStatus(false, '🖥️ PC模式：点击模拟按钮体验游戏');
+}
+
+function updateMotionStatus(active, customMsg) {
+  const el = document.getElementById('motion-status');
+  if (customMsg) { el.textContent = customMsg; el.className = 'motion-status'; return; }
+  if (active) {
+    const modeDef = MotionEngine.getCurrentMode();
+    el.textContent = `✅ 正在记录${modeDef?.label || '运动'}，加油！`;
+    el.className = 'motion-status active';
+  } else {
+    el.textContent = '选择运动类型，点击开始';
+    el.className = 'motion-status';
+  }
+}
+
+// ─── 升级弹窗 ─────────────────────────────────
+
+function showUpgradeModal(plotId, state) {
+  const plot = state.farm.plots.find(p => p.id === plotId);
+  const info = BuildingManager.getPlotInfo(plot);
+  _currentPlotId = plotId;
+
+  document.getElementById('upgrade-modal-title').textContent = `升级 ${info.name}`;
+
+  if (!info.canUpgrade || !info.nextCost) {
+    document.getElementById('upgrade-from-emoji').textContent = info.emoji;
+    document.getElementById('upgrade-to-emoji').textContent = '✨';
+    document.getElementById('upgrade-level-text').textContent = `已达最高等级 Lv${plot.level}`;
+    document.getElementById('upgrade-cost-display').innerHTML = '<span style="color:#888;font-size:13px;">恭喜，已满级！</span>';
+    document.getElementById('upgrade-confirm-btn').disabled = true;
+    document.getElementById('upgrade-confirm-btn').textContent = '已满级';
+  } else {
+    const building = BuildingManager.BUILDINGS[plot.type];
+    const nextLevelData = building.levels[plot.level + 1];
+    document.getElementById('upgrade-from-emoji').textContent = info.emoji;
+    document.getElementById('upgrade-to-emoji').textContent = nextLevelData.emoji;
+    document.getElementById('upgrade-level-text').textContent =
+      `${info.label} → ${nextLevelData.label}  (Lv${plot.level} → Lv${plot.level + 1})`;
+
+    const costEl = document.getElementById('upgrade-cost-display');
+    costEl.innerHTML = '';
+    const costMap = { coins: '🪙金币', seeds: '🌱种子', wood: '🪵木材' };
+    Object.entries(info.nextCost).forEach(([key, val]) => {
+      const have = state.resources[key] || 0;
+      const enough = have >= val;
+      costEl.innerHTML += `<span class="cost-item" style="color:${enough?'#2d6a4f':'#c0392b'}">
+        ${costMap[key] || key} ×${val} ${enough ? '' : `(缺${val-have})`}
+      </span>`;
+    });
+
+    const canAfford = Object.entries(info.nextCost).every(([k,v]) => (state.resources[k]||0) >= v);
+    const btn = document.getElementById('upgrade-confirm-btn');
+    btn.disabled = !canAfford;
+    btn.textContent = canAfford ? '✅ 确认升级' : '💰 资源不足';
+  }
+
+  document.getElementById('upgrade-modal').classList.add('show');
+}
+
+function closeUpgradeModal(event) {
+  if (!event || event.target === document.getElementById('upgrade-modal')) {
+    document.getElementById('upgrade-modal').classList.remove('show');
+    _currentPlotId = null;
+  }
+}
+
+function confirmUpgrade() {
+  if (_currentPlotId === null) return;
+  const result = GameEngine.upgradePlot(_currentPlotId);
+  if (result.success) {
+    document.getElementById('upgrade-modal').classList.remove('show');
+    _currentPlotId = null;
+    showToast('🎉 升级成功！');
+  } else {
+    showToast({ insufficient_resources: '💰 资源不足', max_level: '已是最高等级' }[result.reason] || '升级失败');
+  }
+}
+
+// ─── 解锁地块 ─────────────────────────────────
+
+function showUnlockPrompt(plotId, resources) {
+  const cost = BuildingManager.UNLOCK_COST;
+  const canAfford = (resources.wood || 0) >= cost.wood;
+  const msg = canAfford
+    ? `消耗 🪵${cost.wood}木材 解锁此地块？`
+    : `需要 🪵${cost.wood}木材 解锁（当前${resources.wood}，还差${cost.wood - resources.wood}）`;
+  if (canAfford && confirm(msg)) {
+    const r = GameEngine.unlockPlot(plotId);
+    if (r.success) showToast('🔓 地块已解锁！');
+  } else if (!canAfford) {
+    showToast('💡 完成里程碑可获得木材！');
+  }
+}
+
+// ─── 任务 ─────────────────────────────────────
+
+function claimTask(taskId) {
+  const result = GameEngine.claimTaskReward(taskId);
+  if (result.success) renderTasks(GameEngine.getState());
+}
+
+function onTaskCompleted(taskId) {
+  renderTasks(GameEngine.getState());
+  showToast('✅ 任务达成！点击领取奖励');
+}
+
+function onRewardClaimed(taskId, reward, resources) {
+  updateResourceUI(resources);
+  renderTasks(GameEngine.getState());
+  const parts = [];
+  if (reward.coins) parts.push(`🪙 +${reward.coins} 金币`);
+  if (reward.seeds) parts.push(`🌱 +${reward.seeds} 种子`);
+  if (reward.wood)  parts.push(`🪵 +${reward.wood} 木材`);
+  document.getElementById('reward-emoji').textContent = '🎁';
+  document.getElementById('reward-title').textContent = '奖励到手！';
+  document.getElementById('reward-content').textContent = parts.join('  ');
+  document.getElementById('reward-modal').classList.add('show');
+}
+
+function closeRewardModal(event) {
+  if (!event || event.target === document.getElementById('reward-modal')) {
+    document.getElementById('reward-modal').classList.remove('show');
+  }
+}
+
+// ─── 里程碑&浮字 ──────────────────────────────
+
+function showMilestoneToast(milestone) {
+  showToast(`🏅 成就：${milestone.label}！+🪵${milestone.wood}木材`);
+  updateResourceUI(GameEngine.getState().resources);
+}
+
+function showCoinFloat(amount) {
+  const el = document.createElement('div');
+  el.className = 'float-text';
+  el.textContent = `+${amount}🪙`;
+  el.style.left = (Math.random() * 60 + 20) + '%';
+  el.style.top = '130px';
+  document.body.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+
+function showToast(msg) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = msg;
+  document.getElementById('toast-container').appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ─── 标签切换 ─────────────────────────────────
+
+function switchTab(tab, event) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if (event?.currentTarget) event.currentTarget.classList.add('active');
+
+  const targets = { farm: 'farm-grid', sport: 'motion-panel', tasks: 'task-panel' };
+  if (targets[tab]) {
+    document.getElementById(targets[tab]).scrollIntoView({ behavior: 'smooth' });
+  } else if (tab === 'profile') {
+    showAchievements();
+  }
+}
+
+// ─── 成就 ─────────────────────────────────────
+
+function showAchievements() {
+  const state = GameEngine.getState();
+  const totalEp = state.player.totalEp || 0;
+  let msg = `📊 累计EP：${totalEp.toFixed(1)}\n今日EP：${(state.player.todayEp||0).toFixed(1)}\n\n`;
+  ResourceManager.MILESTONES.forEach(m => {
+    const done = state.achievements.milestones.includes(m.ep);
+    msg += `${done ? '✅' : '⬜'} ${m.emoji} ${m.label}（${m.ep}EP）+${m.wood}🪵\n`;
+  });
+
+  // 各运动贡献（从todayCount展示）
+  msg += `\n今日计数：${(state.player.todayCount||0).toLocaleString()} ${MotionEngine.getCurrentMode()?.unit || '次'}`;
+  alert(msg);
+}
+
+// ─── 重置 ─────────────────────────────────────
+
+function showResetConfirm() {
+  if (confirm('⚠️ 确定要重置所有进度吗？此操作不可恢复。')) {
+    if (confirm('再次确认：真的要清除所有数据？')) {
+      GameEngine.resetGame();
+    }
+  }
+}
+</script>
+
+</body>
+</html>
