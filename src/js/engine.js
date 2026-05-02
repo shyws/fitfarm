@@ -101,6 +101,30 @@ const GameEngine = (() => {
     return result;
   }
 
+  // ─── 种植相关 ────────────────────────────────
+
+  function plantSeed(plotId, seedId) {
+    const result = ResourceManager.plantSeed(state, plotId, seedId);
+    if (result.success) {
+      _uiCallbacks.onSeedPlanted?.(plotId, result.seedDef, state.resources);
+      SaveManager.save(state);
+    }
+    return result;
+  }
+
+  function harvest(plotId) {
+    const result = ResourceManager.harvest(state, plotId);
+    if (result.success) {
+      _uiCallbacks.onHarvest?.(plotId, result.seedDef, result.rewards, state.resources);
+      SaveManager.save(state);
+    }
+    return result;
+  }
+
+  function getPlantingStatus(plotId) {
+    return ResourceManager.getPlantingStatus(state, plotId);
+  }
+
   // ─── 任务相关 ────────────────────────────────
 
   function claimTaskReward(taskId) {
@@ -122,6 +146,14 @@ const GameEngine = (() => {
 
   function getState() { return state; }
 
+  /**
+   * 获取玩家当前运动模式的今日计数
+   */
+  function getCurrentModeCount() {
+    const modeId = state.player.lastSport || 'walk';
+    return ResourceManager.getModeCount(state, modeId);
+  }
+
   return {
     init,
     setSportMode,
@@ -131,8 +163,12 @@ const GameEngine = (() => {
     upgradePlot,
     unlockPlot,
     claimTaskReward,
+    plantSeed,
+    harvest,
+    getPlantingStatus,
     resetGame,
     getState,
+    getCurrentModeCount,
   };
 })();
 

@@ -166,6 +166,29 @@
   </div>
 </div>
 
+<!-- ── 种植选择弹窗 ── -->
+<div class="modal-overlay" id="plant-modal" onclick="closePlantModal(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🌱 选择种子种植</div>
+    <div id="plant-seed-list" style="margin:12px 0;"></div>
+    <button class="btn-secondary" onclick="closePlantModal()">取消</button>
+  </div>
+</div>
+
+<!-- ── 收获弹窗 ── -->
+<div class="modal-overlay" id="harvest-modal" onclick="closeHarvestModal(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div style="text-align:center;font-size:48px;margin-bottom:8px;" id="harvest-emoji">🍅</div>
+    <div class="modal-title" id="harvest-title">作物成熟！</div>
+    <div id="harvest-info" style="text-align:center;font-size:14px;color:#555;margin-bottom:12px;"></div>
+    <div class="cost-display" id="harvest-rewards" style="justify-content:center;margin-bottom:12px;"></div>
+    <button class="btn-primary" id="harvest-confirm-btn" onclick="confirmHarvest()">🎉 收获</button>
+    <button class="btn-secondary" onclick="closeHarvestModal()">取消</button>
+  </div>
+</div>
+
 <!-- ── Toast ── -->
 <div id="toast-container"></div>
 
@@ -204,10 +227,15 @@ window.addEventListener('DOMContentLoaded', () => {
     onPlotUnlocked:      (id, res)   => { renderFarm(GameEngine.getState()); updateResourceUI(res); },
     onRewardClaimed:     onRewardClaimed,
     onReset:             () => location.reload(),
+    onSeedPlanted:       onSeedPlanted,
+    onHarvest:            onHarvest,
   });
 
   renderSportSelector(state);
   renderAll(state);
+  // 启动种植倒计时更新
+  startPlantingTimer();
+}
 
   if (!MotionEngine.isMobile()) {
     enablePcMode();
@@ -287,11 +315,19 @@ function renderAll(state) {
 function updateActivityUI(player, resources, sportDef, count) {
   const todayEp  = player.todayEp  || 0;
   const totalEp  = player.totalEp  || 0;
-  const todayCount = player.todayCount || 0;
+
+  // 显示当前运动模式的今日计数，而不是所有运动的累加
+  const currentModeId = player.lastSport || 'walk';
+  const modeCount = player.modeCounts?.[currentModeId] || 0;
 
   document.getElementById('today-ep-val').textContent  = todayEp.toFixed(1);
   document.getElementById('total-ep-val').textContent  = totalEp.toFixed(1);
-  document.getElementById('sport-count-val').textContent = todayCount.toLocaleString();
+  // 显示当前运动模式的计数，使用对应单位
+  const modeDef = sportDef || MotionEngine.SPORT_MODES[currentModeId];
+  document.getElementById('sport-count-val').textContent = modeCount.toLocaleString();
+  if (modeDef?.unit) {
+    document.getElementById('sport-count-unit').textContent = modeDef.unit;
+  }
 
   // EP进度条（以100EP为满格）
   const pct = Math.min(100, (todayEp / EP_DAY_TARGET) * 100);
@@ -322,6 +358,13 @@ function renderFarm(state) {
         <span class="plot-emoji">🔒</span>
         <span class="plot-label">需要木材解锁</span>`;
       cell.onclick = () => showUnlockPrompt(plot.id, state.resources);
+    } else if (plot.type === 'field' && plot.level === 0 && !plot.planting) {
+      // 荒地（level=0 且未种植）：点击显示种植选项
+      const info = BuildingManager.getPlotInfo(plot);
+      cell.innerHTML = `
+        <span class="plot-emoji">${info.emoji}</span>
+        <span class="plot-label">点击种植</span>`;
+      cell.onclick = () => showPlantModal(plot.id);
     } else {
       const info = BuildingManager.getPlotInfo(plot);
       cell.innerHTML = `
@@ -475,16 +518,259 @@ function confirmUpgrade() {
 
 function showUnlockPrompt(plotId, resources) {
   const cost = BuildingManager.UNLOCK_COST;
-  const canAfford = (resources.wood || 0) >= cost.wood;
-  const msg = canAfford
-    ? `消耗 🪵${cost.wood}木材 解锁此地块？`
-    : `需要 🪵${cost.wood}木材 解锁（当前${resources.wood}，还差${cost.wood - resources.wood}）`;
-  if (canAfford && confirm(msg)) {
-    const r = GameEngine.unlockPlot(plotId);
-    if (r.success) showToast('🔓 地块已解锁！');
-  } else if (!canAfford) {
-    showToast('💡 完成里程碑可获得木材！');
+  const haveWood = resources.wood || 0;
+  const needWood = cost.wood;
+
+  if (haveWood >= needWood) {
+    // 资源足够，显示确认弹窗
+    showUnlockConfirmModal(plotId, needWood, haveWood);
+  } else {
+    // 资源不足，显示详细提示
+    showUnlockInsufficientModal(needWood, haveWood);
   }
+}
+
+function showUnlockConfirmModal(plotId, needWood, haveWood) {
+  // 创建自定义确认弹窗
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay show';
+  modal.id = 'unlock-confirm-modal';
+  modal.onclick = (e) => {
+    if (e.target === modal) closeUnlockModal();
+  };
+  modal.innerHTML = `
+    <div class="modal-sheet" style="text-align:center;">
+      <div class="modal-handle"></div>
+      <div style="font-size:48px;margin-bottom:12px;">🔓</div>
+      <div class="modal-title">解锁新地块</div>
+      <div style="font-size:14px;color:#555;margin-bottom:16px;">
+        解锁此地块需要消耗：
+      </div>
+      <div class="cost-display" style="background:#fff3e0;">
+        <span class="cost-item" style="color:#e65100;">🪵 木材 × ${needWood}</span>
+      </div>
+      <div style="font-size:12px;color:#888;margin:8px 0 16px;">
+        解锁后可建造房屋、花园或农田
+      </div>
+      <button class="btn-primary" onclick="doUnlockPlot(${plotId})">✅ 确认解锁</button>
+      <button class="btn-secondary" onclick="closeUnlockModal()">取消</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function showUnlockInsufficientModal(needWood, haveWood) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay show';
+  modal.id = 'unlock-insufficient-modal';
+  modal.onclick = (e) => {
+    if (e.target === modal) closeUnlockModal();
+  };
+  modal.innerHTML = `
+    <div class="modal-sheet" style="text-align:center;">
+      <div class="modal-handle"></div>
+      <div style="font-size:48px;margin-bottom:12px;">🔒</div>
+      <div class="modal-title">木材不足</div>
+      <div style="font-size:14px;color:#555;margin-bottom:16px;">
+        解锁新地块需要：
+      </div>
+      <div class="cost-display">
+        <span class="cost-item" style="color:#c0392b;">🪵 ${needWood} 木材</span>
+      </div>
+      <div style="font-size:14px;color:#555;margin:12px 0;">
+        您当前拥有：<span style="color:#2d6a4f;font-weight:700;">🪵 ${haveWood} 木材</span>
+      </div>
+      <div style="font-size:14px;color:#c0392b;margin-bottom:16px;">
+        还差 <strong>🪵 ${needWood - haveWood}</strong> 木材
+      </div>
+      <div style="font-size:12px;color:#888;background:#f5f5f5;padding:12px;border-radius:8px;margin-bottom:12px;">
+        💡 获取木材的方式：<br>
+        • 累计消耗 50 EP → 1 木材<br>
+        • 累计消耗 200 EP → 3 木材<br>
+        • 累计消耗 500 EP → 10 木材<br>
+        • 完成任务奖励
+      </div>
+      <button class="btn-secondary" onclick="closeUnlockModal()">知道了</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function closeUnlockModal() {
+  const modals = document.querySelectorAll('#unlock-confirm-modal, #unlock-insufficient-modal');
+  modals.forEach(m => m.remove());
+}
+
+function doUnlockPlot(plotId) {
+  const r = GameEngine.unlockPlot(plotId);
+  closeUnlockModal();
+  if (r.success) {
+    showToast('🔓 地块已解锁！');
+    renderFarm(GameEngine.getState());
+  } else {
+    showToast('解锁失败');
+  }
+}
+
+// ─── 种植相关 ─────────────────────────────────
+
+let _currentPlantPlotId = null;
+let _currentHarvestPlotId = null;
+let _plantingTimer = null;
+
+function startPlantingTimer() {
+  if (_plantingTimer) clearInterval(_plantingTimer);
+  _plantingTimer = setInterval(updatePlantingUI, 1000);
+  updatePlantingUI(); // 立即更新一次
+}
+
+function updatePlantingUI() {
+  const state = GameEngine.getState();
+  if (!state) return;
+
+  state.farm.plots.forEach(plot => {
+    if (!plot.unlocked || plot.type !== 'field') return;
+
+    const cell = document.querySelector(`.plot-cell[data-plot-id="${plot.id}"]`);
+    if (!cell) return;
+
+    if (plot.planting) {
+      const status = GameEngine.getPlantingStatus(plot.id);
+      if (!status) return;
+
+      if (status.isReady) {
+        // 作物成熟，显示收获状态
+        cell.querySelector('.plot-emoji').textContent = status.seedDef.emoji;
+        cell.querySelector('.plot-label').textContent = '✅ 可收获';
+        cell.classList.add('plant-ready');
+        cell.onclick = () => showHarvestModal(plot.id);
+      } else {
+        // 生长中，显示进度
+        const mins = Math.floor(status.remainingSeconds / 60);
+        const secs = status.remainingSeconds % 60;
+        const timeStr = mins > 0 ? `${mins}分${secs}秒` : `${secs}秒`;
+        cell.querySelector('.plot-label').textContent = `⏳ ${timeStr}`;
+      }
+    }
+  });
+}
+
+function showPlantModal(plotId) {
+  const state = GameEngine.getState();
+  const plot = state.farm.plots.find(p => p.id === plotId);
+  if (!plot || plot.type !== 'field' || plot.level > 0 || plot.planting) return;
+
+  _currentPlantPlotId = plotId;
+  const seedList = document.getElementById('plant-seed-list');
+  const seeds = ResourceManager.SEED_TYPES;
+  const seedCount = state.resources.seeds || 0;
+
+  seedList.innerHTML = '';
+
+  Object.values(seeds).forEach(seed => {
+    const mins = Math.floor(seed.growTime / 60);
+    const secs = seed.growTime % 60;
+    const timeStr = mins > 0 ? `${mins}分${secs}秒` : `${secs}秒`;
+
+    const div = document.createElement('div');
+    div.className = 'seed-option';
+    div.innerHTML = `
+      <div class="seed-option-info">
+        <span class="seed-emoji">${seed.emoji}</span>
+        <div>
+          <div class="seed-name">${seed.name}</div>
+          <div class="seed-meta">⏱ ${timeStr}</div>
+        </div>
+      </div>
+      <div class="seed-rewards">
+        ${seed.rewards.coins ? `🪙 ${seed.rewards.coins}` : ''}
+        ${seed.rewards.wood ? ` 🪵 ${seed.rewards.wood}` : ''}
+      </div>
+    `;
+
+    if (seedCount > 0) {
+      div.onclick = () => doPlant(seed.id);
+      div.style.cursor = 'pointer';
+      div.style.opacity = '1';
+    } else {
+      div.style.opacity = '0.5';
+    }
+
+    seedList.appendChild(div);
+  });
+
+  document.getElementById('plant-modal').classList.add('show');
+}
+
+function closePlantModal(event) {
+  if (!event || event.target === document.getElementById('plant-modal')) {
+    document.getElementById('plant-modal').classList.remove('show');
+    _currentPlantPlotId = null;
+  }
+}
+
+function doPlant(seedId) {
+  if (_currentPlantPlotId === null) return;
+  const result = GameEngine.plantSeed(_currentPlantPlotId, seedId);
+  if (result.success) {
+    closePlantModal();
+    renderFarm(GameEngine.getState());
+    showToast(`🌱 种下了${result.seedDef.name}！`);
+  } else {
+    const msgs = {
+      no_seeds: '💡 种子不足，完成任务可获得种子',
+      not_wasteland: '💡 只能在荒地上种植',
+    };
+    showToast(msgs[result.reason] || '种植失败');
+  }
+}
+
+function showHarvestModal(plotId) {
+  const status = GameEngine.getPlantingStatus(plotId);
+  if (!status || !status.isReady) return;
+
+  _currentHarvestPlotId = plotId;
+  document.getElementById('harvest-emoji').textContent = status.seedDef.emoji;
+  document.getElementById('harvest-title').textContent = `${status.seedDef.name}成熟了！`;
+
+  const rewardEl = document.getElementById('harvest-rewards');
+  rewardEl.innerHTML = '';
+  if (status.seedDef.rewards.coins) {
+    rewardEl.innerHTML += `<span class="cost-item">🪙 +${status.seedDef.rewards.coins}</span>`;
+  }
+  if (status.seedDef.rewards.wood) {
+    rewardEl.innerHTML += `<span class="cost-item">🪵 +${status.seedDef.rewards.wood}</span>`;
+  }
+
+  document.getElementById('harvest-modal').classList.add('show');
+}
+
+function closeHarvestModal(event) {
+  if (!event || event.target === document.getElementById('harvest-modal')) {
+    document.getElementById('harvest-modal').classList.remove('show');
+    _currentHarvestPlotId = null;
+  }
+}
+
+function confirmHarvest() {
+  if (_currentHarvestPlotId === null) return;
+  const result = GameEngine.harvest(_currentHarvestPlotId);
+  if (result.success) {
+    closeHarvestModal();
+    renderFarm(GameEngine.getState());
+    updateResourceUI(GameEngine.getState().resources);
+    showToast(`🎉 收获${result.seedDef.name}！+🪙${result.rewards.coins}${result.rewards.wood ? ` +🪵${result.rewards.wood}` : ''}`);
+  } else {
+    showToast('收获失败');
+  }
+}
+
+function onSeedPlanted(plotId, seedDef, resources) {
+  updateResourceUI(resources);
+}
+
+function onHarvest(plotId, seedDef, rewards, resources) {
+  updateResourceUI(resources);
 }
 
 // ─── 任务 ─────────────────────────────────────

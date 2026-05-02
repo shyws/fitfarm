@@ -17,6 +17,7 @@ const DEFAULT_SAVE = {
     todayCount: 0,       // 今日计数
     lastSport: 'walk',   // 最后选择的运动类型
     lastActivityDate: getTodayStr(),
+    modeCounts: {},      // v2.1: 按运动模式分别计数 { walk: 100, run: 50, ... }
   },
   resources: {
     coins: 10,
@@ -101,6 +102,7 @@ const SaveManager = {
     if (data.player.lastSport === undefined) data.player.lastSport = 'walk';
     if (data.player.totalCount === undefined) data.player.totalCount = 0;
     if (data.player.todayCount === undefined) data.player.todayCount = 0;
+    if (!data.player.modeCounts) data.player.modeCounts = {};
     return data;
   },
 
@@ -113,6 +115,8 @@ const SaveManager = {
       save.player.todayEp = 0;
       save.player.todayCount = 0;
       save.player.lastActivityDate = today;
+      // 重置每日模式计数
+      save.player.modeCounts = {};
     }
   },
 

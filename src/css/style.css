@@ -655,3 +655,62 @@ html, body {
 @media (min-width: 480px) {
   #app { box-shadow: 0 0 40px rgba(0,0,0,0.2); }
 }
+
+/* ─── 种植相关样式 ──────────────────────────────── */
+.seed-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: #f8f8f8;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  border: 2px solid transparent;
+  transition: all 0.15s;
+}
+.seed-option:hover {
+  background: var(--green-pale);
+  border-color: var(--green-light);
+}
+.seed-option-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.seed-emoji {
+  font-size: 36px;
+}
+.seed-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+.seed-meta {
+  font-size: 12px;
+  color: var(--gray);
+  margin-top: 2px;
+}
+.seed-rewards {
+  font-size: 14px;
+  color: var(--green-dark);
+  font-weight: 600;
+}
+
+/* 作物成熟状态 */
+.plot-cell.plant-ready {
+  animation: pulse 1.5s infinite;
+  border-color: var(--yellow);
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: var(--shadow-sm); }
+  50% { box-shadow: 0 0 20px rgba(255, 209, 102, 0.6); }
+}
+
+/* 收获弹窗 */
+#harvest-emoji {
+  animation: bounce 0.6s ease;
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
